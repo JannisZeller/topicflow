@@ -203,7 +203,6 @@ class squareLDDocuments(object):
             C_T = self.C_DId.flat_values
             dist_W_T = tfd.Categorical(probs=tf.gather(self.Theta, C_T))
             W_T = dist_W_T.sample()
-            print(W_T)
             W_DId = tf.RaggedTensor.from_row_lengths(
                 W_T, 
                 *self.C_DId.nested_row_lengths())
