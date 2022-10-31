@@ -9,7 +9,9 @@
 # %% Dependencies
 # ------------------------------------------------------------------------------
 import numpy as np
+import tensorflow as tf
 import matplotlib.pyplot as plt
+from typing import Union
 
 
 
@@ -62,7 +64,7 @@ def visualize_topics(Theta: np.ndarray, N_row: int, N_col: int) -> plt.Axes:
     K = Theta.shape[0]
     V = Theta.shape[1]
 
-    assert np.sqrt(V).is_integer(), "To be plotted and represented as square imgage V must be a square of an integer."
+    assert np.sqrt(V).is_integer(), "To be plotted and represented as square image V must be a square of an integer."
 
     sqrtV = int(np.sqrt(V))
 
@@ -71,9 +73,16 @@ def visualize_topics(Theta: np.ndarray, N_row: int, N_col: int) -> plt.Axes:
     idx = 0
     for i in range(N_row):
         for k in range(N_col):
-            axes[i, k].imshow(Theta[idx,:].reshape((sqrtV, sqrtV)), cmap="Greys")
+            if idx < K:
+                data = Theta[idx,:].reshape((sqrtV, sqrtV))
+            if idx >= K:
+                data = np.zeros((sqrtV, sqrtV))
+
+            axes[i, k].imshow(data, cmap="Greys")
             axes[i, k].set_xticks([])
             axes[i, k].set_yticks([])
+            if idx >= K:
+                axes[i, k].axis('off')
 
             idx += 1
     
@@ -83,12 +92,14 @@ def visualize_topics(Theta: np.ndarray, N_row: int, N_col: int) -> plt.Axes:
 # %% Converting docs to images
 # ------------------------------------------------------------------------------
 
-def doc_to_image(document: np.ndarray, sqrt_V: int) -> np.ndarray:
+def doc_to_image(
+    document: Union[np.ndarray, tf.Tensor, tf.RaggedTensor, list], 
+    sqrt_V: int) -> np.ndarray:
     """Converting documents to images.
 
     Parameters
     ----------
-    document : np.ndarray
+    document : Array / Tensor or List
         Array representing a full tokenized document.
     sqrt_V : int
         Square root of vocab size (must be int).
@@ -115,7 +126,7 @@ def doc_to_image(document: np.ndarray, sqrt_V: int) -> np.ndarray:
 # %% Converting docs to images
 # ------------------------------------------------------------------------------
 def visualize_random_docs(
-    documents: np.ndarray, 
+    documents: Union[np.ndarray, tf.Tensor, tf.RaggedTensor], 
     sqrt_V: int, 
     N_row: int = 2, 
     N_col: int = 5, 
@@ -125,8 +136,8 @@ def visualize_random_docs(
 
     Parameters
     ----------
-    documents : np.ndarray
-        Array representing a full tokenized document.
+    documents : Array / Tensor
+        Numpy array or tf Tensor representing an square LD dataset.
     N_row : int
         Number of grid-rows.
     N_col : int
@@ -139,9 +150,6 @@ def visualize_random_docs(
     np.ndarray : 
         Plot of a grid of documents represented by counts.
     """
-
-    if type(documents) != np.ndarray:
-        documents = np.array(documents)
 
     D = documents.shape[0]
 

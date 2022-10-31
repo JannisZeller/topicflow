@@ -135,7 +135,7 @@ class squareLDDocuments(object):
 
 
     def get_doc_lengths(self):
-        return self.single_lengths
+        return self.single_lengths.numpy()
 
 
     def __sample_single_lengths(self, 
@@ -144,7 +144,7 @@ class squareLDDocuments(object):
         N_words_rate:  int=None):
 
         if N_words_rate is not None:
-            single_lengths_dist = tfd.Poisson(rate=100)
+            single_lengths_dist = tfd.Poisson(rate=N_words_rate)
             single_lengths      = tf.cast(single_lengths_dist.sample(N_docs), 
                                           dtype=tf.int32)
             self.single_lengths = single_lengths
