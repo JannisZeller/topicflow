@@ -8,6 +8,7 @@
 
 # %% Dependencies
 # ------------------------------------------------------------------------------
+from typing import Union
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -81,7 +82,8 @@ class squareLDDocuments(object):
         sqrt_N_vocab:  int,
         N_words_fixed: int=None,
         N_words_rate:  int=None,
-        alpha: float=1.
+        alpha: float=1.,
+        Theta_overwrite: Union[tf.Tensor, np.ndarray]=None
         ) -> object:
         """
         Parameters
@@ -101,6 +103,7 @@ class squareLDDocuments(object):
         
         ## Overall
         assert (N_words_fixed is None) != (N_words_rate is None), "Exactly one of N_words_fixed and N_words_rate must be passed."
+        assert (Theta_overwrite is None) or (Theta_overwrite.shape == (2*sqrt_N_vocab, sqrt_N_vocab**2)), "Incompatible `Theta_overwrite` - shape. Must be `(2*sqrt_N_vocab, sqrt_N_vocab**2)`."
         self.N_topics = int(2*sqrt_N_vocab)
         self.N_vocab = int(sqrt_N_vocab**2)
         self.N_docs = N_docs
@@ -117,7 +120,10 @@ class squareLDDocuments(object):
         self.__construct_word_gird(sqrt_N_vocab)
 
         ## Topic-Word Distributions
-        self.__sample_topic_word_prevalences()
+        if Theta_overwrite is None:
+            self.__construct_topic_word_prevalences()
+        else: 
+            self.Theta = Theta_overwrite
 
         ## Document-Topic Distribution
         self.__sample_document_topic_prevalences()
@@ -160,7 +166,7 @@ class squareLDDocuments(object):
                                  (sqrt_N_vocab, sqrt_N_vocab))
 
 
-    def __sample_topic_word_prevalences(self):
+    def __construct_topic_word_prevalences(self):
         Theta_idx = ([row for row in self.V_grid] + 
                      [col for col in self.V_grid.T])
         Theta = np.zeros((self.N_topics, self.N_vocab))
