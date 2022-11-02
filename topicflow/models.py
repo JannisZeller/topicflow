@@ -22,8 +22,8 @@ class LDA(object):
     def __init__(
         self, 
         N_topics: int, 
-        theta_prior: float=1.0,
-        pi_prior:    float=1.0,
+        theta_prior: float=0.5,
+        pi_prior:    float=0.5,
         fix_vocab_size: int=None,
         fit_procedure: str="gibbs"):
         """ 
