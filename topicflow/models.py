@@ -56,8 +56,9 @@ class LDA(object):
         ## Determine if batched 
         self.batched = n_batch != None
         assert (n_batch is None) == (n_epochs is None), "Either none of both of n_batch & n_epochs must be specified."
-        assert n_batch <= W_DId.shape[0], "Batch size exeeds number of documents."
-        if n_batch <= 250:
+        if self.batched:
+            assert n_batch <= W_DId.shape[0], "Batch size exeeds number of documents."
+        if self.batched and (n_batch <= 250):
             print("Warning: A larger batch size (>250) is recommended.")
 
         ## Counting Vocab (from fixed length or from Word-counts)
@@ -190,6 +191,57 @@ class LDA(object):
 
                 self.Pi = tf.concat(self.Pi_list, axis=0)
 
+        
+        
+        ## Collapsed Gibbs sampling
+        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+        if self._fit_procedure == "collapsed_gibbs":
+
+            ## Get in shape
+            K = self._N_topics
+            V = self._vocab_size
+            D = self.data_specs["N_docs"]
+
+
+            ## "Full" Collapsed Gibbs sampling
+            # - - - - - - - - - - - - - - - - 
+            if n_batch is None:
+
+                # ---------- Test ---------- #
+                try:
+                    W_DId = W_DId.numpy().tolist() # Unragged
+                except: 
+                    W_DId = W_DId.to_list() # Ragged
+                N_D = [len(doc) for doc in W_DId]
+
+
+                ## Setting up priors and initials
+                C_DNmax, n_KV, n_DK = self.__collapsed_gibbs_init(W_DId, N_D)
+                self.theta_prior = (self.theta_prior_val 
+                    * tf.ones(shape=(K, V), dtype=tf.float32))
+                self.pi_prior    = (self.pi_prior_val
+                    * tf.ones(shape=(D, K), dtype=tf.float32))
+
+                ## Setting up Verbosity
+                iterator = tqdm(range(N_iter)) # Default
+                if verbose == 0:
+                    iterator = range(N_iter)
+                
+                ## Sampling Loop
+                for _ in iterator:
+                    C_DNmax = self._collapsed_gibbs_sample(
+                        C_DNmax, n_KV, n_DK, N_D, W_DId)
+                
+                self.__collapsed_gibbs_sampling_posteriors(n_KV, n_DK)
+
+
+            ## Batched Collapsed Gibbs sampling
+            # - - - - - - - - - - - - - - - - - 
+            if n_batch is not None:
+                raise NotImplementedError("Batched Processing with collapsed Gibbs sampling is not yet implemented.")
+
+            
+
 
     def predict(self, X, procedure: str="gibbs", N_iter: int=10):
 
@@ -239,11 +291,133 @@ class LDA(object):
         return Theta, Pi, C_DIdK
 
 
+    # @tf.function
+    def _collapsed_gibbs_sample(self, C_DNmax, n_KV, n_DK, N_D, W_DId):   # C_DIdK, W_DId):
+
+        ## Get in shape
+        D = self.data_specs["N_docs"]
+
+        C_DNmax_new = np.zeros_like(C_DNmax)
+
+        for d in range(D):
+            for i in range(N_D[d]):
+                w_di = W_DId[d][i]
+                
+                ## decrement counters
+                c_di = int(C_DNmax[d, i])  # previous assignment
+                n_KV[c_di, w_di] -= 1
+                n_DK[d, c_di] -= 1
+
+                ## assign new topics
+                prob = self.__collapsed_topic_prob(n_KV, n_DK, w_di, d)
+                cdi_new = np.argmax(np.random.multinomial(1, prob))
+
+                ## increment counter with new assignment
+                n_KV[cdi_new, w_di] += 1
+                n_DK[d, cdi_new] += 1
+                C_DNmax_new[d, i] = cdi_new
+
+        return C_DNmax_new
+
+
+    def __collapsed_gibbs_init(self, W_DId, N_D):
+
+        ## Get in shape
+        K = self._N_topics
+        V = self._vocab_size
+        D = self.data_specs["N_docs"]
+        Nmax = self.data_specs["max_doclength"]
+
+        C_DNmax = np.zeros((D, Nmax))
+        n_KV = np.zeros((K, V))
+        n_DK = np.zeros((D, K))
+
+        for d in range(D):
+            for i in range(N_D[d]):
+                # randomly assign topic to word w_{di}
+                w_di = W_DId[d][i]
+                C_DNmax[d, i] = np.random.randint(K)
+
+                # increment counters
+                c_di = int(C_DNmax[d, i])
+                n_KV[c_di, w_di] += 1
+                n_DK[d, c_di] += 1
+
+        return C_DNmax, n_KV, n_DK
+
+
+    def __collapsed_topic_prob(self, n_KV, n_DK, w_di, d):
+        """
+        P(z_{dn}^i=1 | z_{(-dn)}, w)
+        """
+        ## Get in shape
+        K = self._N_topics
+        V = self._vocab_size
+
+        prob  = np.empty(K)
+        beta  = self.theta_prior_val
+        alpha = self.pi_prior_val
+        
+        for i in range(K):
+            # P(w_dn | z_i)
+            _1 = (n_KV[i, w_di] + beta) / (n_KV[i, :].sum() + V*beta)
+            # P(z_i | d)
+            _2 = (n_DK[d, i] + alpha) / (n_DK[d, :].sum() + K*alpha)
+            
+            prob[i] = _1 * _2
+        
+        return prob / prob.sum()
+
+
+    def __collapsed_gibbs_sampling_posteriors(self, n_KV, n_DK):
+
+        ## Get in shape
+        K = self._N_topics
+        V = self._vocab_size
+        D = self.data_specs["N_docs"]
+
+        Theta = np.empty((K, V))
+        Pi    = np.empty((D, K))
+        beta  = self.theta_prior_val
+        alpha = self.pi_prior_val
+
+        for v in range(V):
+            for k in range(K):
+                Theta[k, v] = (n_KV[k, v] + beta) / (n_KV[k, :].sum() + V*beta)
+
+        for d in range(D):
+            for k in range(K):
+                Pi[d, k] = (n_DK[d, k] + alpha) / (n_DK[d, :].sum() + k*alpha)
+            
+        self.Theta = Theta
+        self.Pi    = Pi
+
+        # N_DKV = self.__tf_N_tensor(C_DIdK, W_DId)
+        
+        # ## Pi
+        # Pi_numerator = (self.pi_prior_val 
+        #        + tf.reduce_sum(N_DKV, axis=-1))
+
+        # Pi_denominator = tf.expand_dims(
+        #     tf.reduce_sum(Pi_numerator, -1), axis=-1)
+
+        # self.Pi = Pi_numerator / Pi_denominator
+
+        # ## Theta
+        # Theta_numerator = (self.theta_prior_val 
+        #             + tf.reduce_sum(N_DKV, axis=0))
+
+        # Theta_denominator = tf.expand_dims(
+        #     tf.reduce_sum(Theta_numerator, -1), axis=-1)
+
+        # self.Theta = Theta_numerator / Theta_denominator
+
+
     def __init_C_DIdK_(self, W_DId):
 
         ## Get in shape
         K = self._N_topics
-        D = W_DId.shape[0]
+        D = self.data_specs["N_docs"]
         Nmax = self.data_specs["max_doclength"]
 
         if self.ragged:
@@ -317,13 +491,10 @@ class LDA(object):
         if self.batched: 
             W_DNmax = W_DId
             mask = W_DId != V+1
-        # print(W_DNmax.shape)
 
         ## Numerator
         Theta_DNmaxK = tf.gather(tf.transpose(Theta), W_DNmax) 
-        # print(Theta_DNmaxK.shape)
         Pi_block  = tf.stack(Nmax * [Pi], axis=1)
-        # print(Pi_block.shape)
         numerator = tf.math.multiply(Pi_block, Theta_DNmaxK)
 
         ## Sampling
@@ -337,7 +508,7 @@ class LDA(object):
 
         ## One-Hot-Encoding
         return tf.one_hot(C_DId, K, axis=-1)
-        
+      
 
     @tf.function
     def __sample_Theta(self, N_DKV):
@@ -349,7 +520,7 @@ class LDA(object):
     def __sample_Pi(self, N_DKV):
         dist_Pi = tfd.Dirichlet(self.pi_prior + tf.reduce_sum(N_DKV, axis=-1))
         return dist_Pi.sample()
-    
+
 
     def __inspect_data(self, W_DId):
         
