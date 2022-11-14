@@ -123,6 +123,28 @@ def doc_to_image(
     return img
 
 
+# %% Visualizing single document
+# ------------------------------------------------------------------------------
+def visualize_doc(
+    document, 
+    sqrt_V
+    ) -> plt.Axes:
+    """
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    """
+    fig, axis = plt.subplots(1, 1, figsize = (3, 3))
+    axis.imshow(doc_to_image(document, sqrt_V), cmap="Greys")
+    axis.set_xticks([])
+    axis.set_yticks([])
+
+    return fig
+
+
 # %% Converting docs to images
 # ------------------------------------------------------------------------------
 def visualize_random_docs(
@@ -130,6 +152,7 @@ def visualize_random_docs(
     sqrt_V: int, 
     N_row: int = 2, 
     N_col: int = 5, 
+    replace: bool = False
     ) -> plt.Axes:
     """Visualized some random documents from a document-array or tensor (number
     of documents as 0-dimension).
@@ -144,6 +167,9 @@ def visualize_random_docs(
         Number of grid-columns.
     sqrt_V : int
         Square root of vocab size (must be int).
+    replace : bool
+        Bool indicating wether the draw from the documents should be with or
+        without replacement.
 
     Returns
     -------
@@ -153,14 +179,14 @@ def visualize_random_docs(
 
     D = documents.shape[0]
 
-    idxs = np.random.choice(np.arange(D), size = N_row * N_col)
+    idxs = np.random.choice(np.arange(D), size = N_row * N_col, replace=replace)
     print(f"Presenting documents {idxs}")
 
     images = []
     for idx in idxs:
         images.append(doc_to_image(documents[idx, :], sqrt_V=sqrt_V))
 
-    fig, axes = plt.subplots(N_row, N_col,figsize = (3*N_col, 3*N_row))
+    fig, axes = plt.subplots(N_row, N_col, figsize = (3*N_col, 3*N_row))
     idx = 0
     for i in range(N_row):
         for k in range(N_col):

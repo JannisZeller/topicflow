@@ -200,7 +200,7 @@ class squareLDDocuments(object):
         C_DIdK = tf.one_hot(C_DId, depth=self.N_topics, axis=-1)
         
         self.C_DId = C_DId
-        self.C_DIdK =  C_DIdK
+        self.C_DIdK = C_DIdK
 
 
     def __sample_words(self):
