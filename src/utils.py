@@ -1,8 +1,8 @@
 # ------------------------------------------------------------------------------
-# topicflow.utils
-# ---------------
+# src.utils
+# ---------
 # 
-# Helper functions and plot-tools for `topicflow.models` and `topicflow.data`.
+# Helper functions and plot-tools for `src.models` and `src.data`.
 # ------------------------------------------------------------------------------
 
 
@@ -16,9 +16,10 @@ from typing import Union
 
 
 
-# %% One-hot encoding for numpy
+# %% General Utils
 # ------------------------------------------------------------------------------
 
+## One-Hot for Numpy
 def np_one_hot(indices: np.ndarray, depth: int) -> np.ndarray:
     """One-hot encoding inspired by `tensorflow.one_hot`. Always adds one-hot 
     dimension as last axis.
@@ -40,9 +41,11 @@ def np_one_hot(indices: np.ndarray, depth: int) -> np.ndarray:
     return res
 
 
-# %% Visualizing multiple topics simultaniously in a grid as square images
+
+# %% Plotting and Viszalizations
 # ------------------------------------------------------------------------------
 
+## Visualizing multiple topics simultaniously in a grid as square images
 def visualize_topics(Theta: np.ndarray, N_row: int, N_col: int) -> plt.Axes:
     """Visualizing multiple topics simultaniously in a grid as square images.
 
@@ -89,9 +92,7 @@ def visualize_topics(Theta: np.ndarray, N_row: int, N_col: int) -> plt.Axes:
     return fig
 
 
-# %% Converting docs to images
-# ------------------------------------------------------------------------------
-
+## Converting docs to images
 def doc_to_image(
     document: Union[np.ndarray, tf.Tensor, tf.RaggedTensor, list], 
     sqrt_V: int) -> np.ndarray:
@@ -123,16 +124,18 @@ def doc_to_image(
     return img
 
 
-# %% Visualizing single document
-# ------------------------------------------------------------------------------
+## Visualizing single document
 def visualize_doc(
-    document, 
-    sqrt_V
-    ) -> plt.Axes:
-    """
+    document: Union[np.ndarray, tf.Tensor, tf.RaggedTensor, list], 
+    sqrt_V : int) -> plt.Axes:
+    """Visualizes a single document
 
     Parameters
     ----------
+    document : Array / Tensor or List
+        Array representing a full tokenized document.
+    sqrt_V : int
+        Square root of vocab size (must be int).
 
     Returns
     -------
@@ -145,15 +148,12 @@ def visualize_doc(
     return fig
 
 
-# %% Converting docs to images
-# ------------------------------------------------------------------------------
+## Visualizing random documents
 def visualize_random_docs(
     documents: Union[np.ndarray, tf.Tensor, tf.RaggedTensor], 
     sqrt_V: int, 
     N_row: int = 2, 
-    N_col: int = 5, 
-    replace: bool = False
-    ) -> plt.Axes:
+    N_col: int = 5) -> plt.Axes:
     """Visualized some random documents from a document-array or tensor (number
     of documents as 0-dimension).
 
@@ -167,9 +167,6 @@ def visualize_random_docs(
         Number of grid-columns.
     sqrt_V : int
         Square root of vocab size (must be int).
-    replace : bool
-        Bool indicating wether the draw from the documents should be with or
-        without replacement.
 
     Returns
     -------
@@ -179,7 +176,7 @@ def visualize_random_docs(
 
     D = documents.shape[0]
 
-    idxs = np.random.choice(np.arange(D), size = N_row * N_col, replace=replace)
+    idxs = np.random.choice(np.arange(D), size = N_row * N_col, replace=False)
     print(f"Presenting documents {idxs}")
 
     images = []
