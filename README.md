@@ -36,9 +36,6 @@ $$p(C\vert \Theta, \Pi, W)=\prod_{d=1}^D \prod_{i=1}^{N} \frac{\prod_{k=1}^K \le
 which can be identitfied as a categorical distribution.
 
 **3. $\Theta$- and $\Pi$-Tensors**: Sampling $\Theta$ and $\Pi$:
-$$\begin{align*}
-        p(\Theta\vert C, W) &= \prod_{k=1}^K \mathcal D(\theta_k; \ \beta_{kv} + n_{\cdot kv}) \\
-        p(\Pi\vert C, W)    &= \prod_{d=1}^D \mathcal D(\pi_d; \ \alpha_{dk} + n_{dk\cdot}) \, .
-\end{align*}$$
+$$\begin{align*}p(\Theta\vert C, W) &= \prod_{k=1}^K \mathcal D(\theta_k; \ \beta_{kv} + n_{\cdot kv}) \\ p(\Pi\vert C, W)    &= \prod_{d=1}^D \mathcal D(\pi_d; \ \alpha_{dk} + n_{dk\cdot}) \, .\end{align*}$$
 $\Theta$ and $\Pi$ are neither dependent on the number of words per document nor do they have an $I_d$ dimension. The notation $n_{\cdot k v}$ (for example) represents a summation along the "dotted"-axis, i. e.
 $$n_{\cdot k v} = \sum_{d=1}^D n_{dkv}\, .$$
