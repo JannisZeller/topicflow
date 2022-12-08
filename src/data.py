@@ -35,7 +35,8 @@ class squareLDDocuments(object):
         sqrt_N_vocab:  int,
         N_words_fixed: int=None,
         N_words_rate:  int=None,
-        alpha: float=1.
+        alpha: float=1.,
+        Theta_overwrite: tf.Tensor=None,
         ) -> object:
         """
         Parameters
@@ -51,6 +52,9 @@ class squareLDDocuments(object):
             Number of words per document as rate of a poisson distribution
         alpha : float
             Sparsity of Document-Topic matrix (higher is LESS sparse)
+        theta_overwrite : tf.Tensor
+            Theta to overwrite the construction of theta as stripes of the vocab
+            grid (mainly to present the predict-method of sampler.gibbsSampler).
         """
         
         ## Overall data specifications
@@ -67,7 +71,7 @@ class squareLDDocuments(object):
         ## Sampling
         self.__sample_single_lengths(N_docs, N_words_fixed, N_words_rate)
         self.__construct_word_gird(sqrt_N_vocab)
-        self.__construct_topic_word_prevalences()
+        self.__construct_topic_word_prevalences(Theta_overwrite)
         self.__sample_document_topic_prevalences()
         self.__sample_word_topic_assignments()
         self.__sample_words()
@@ -116,14 +120,17 @@ class squareLDDocuments(object):
 
     ## Construction of the topic-word-prevalences (Theta) as "stripes" in the
     #  word grid.
-    def __construct_topic_word_prevalences(self):
-        Theta_idx = ([row for row in self.V_grid] + 
-                     [col for col in self.V_grid.T])
-        Theta = np.zeros((self.N_topics, self.N_vocab))
-        denominator = self.V_grid.shape[0]
-        for k, idx in enumerate(Theta_idx):
-            Theta[k, idx] = 1. / denominator
-        self.Theta = tf.constant(Theta, dtype=tf.float32)
+    def __construct_topic_word_prevalences(self, Theta_overwrite):
+        if Theta_overwrite is None:
+            Theta_idx = ([row for row in self.V_grid] + 
+                        [col for col in self.V_grid.T])
+            Theta = np.zeros((self.N_topics, self.N_vocab))
+            denominator = self.V_grid.shape[0]
+            for k, idx in enumerate(Theta_idx):
+                Theta[k, idx] = 1. / denominator
+            self.Theta = tf.constant(Theta, dtype=tf.float32)
+        else:
+            self.Theta = Theta_overwrite
 
     ## Sample document-topic prevalences from a Dirichlet. Gets more sparse 
     #  (document is more "focussed" on few topics) with smaller values of alpha.

@@ -33,213 +33,92 @@ class gibbsSampler():
         pi_prior:     float=0.5,
         fix_vocab_size: int=None,
         fit_procedure:  str="standard"):        
-
+        ## Setting internal parameters
         self._fit_procedure  = fit_procedure
         self.theta_prior_val = theta_prior
         self.pi_prior_val    = pi_prior
         self._K_topics       = K_topics
         self._fix_vocab_size = fix_vocab_size
 
-    ## Fit and predict procedure
+
+    ## Fit and predict procedures
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
     def fit(self, 
-    # TODO: Slice fit procidures to other methods
         W_DId:       Union[tf.Tensor, tf.RaggedTensor], 
         N_iter:      int=200,
         n_batch:     int=None,
         n_epochs:    int=None,
         n_per_batch: int=5,
-        verbose:     int=1):
-        """
-        """
+        verbose:     int=1) -> None:
 
         ## Data inspection
-        #  The `ragged`ness of the data is used in the individual samplers.
-        self.__inspect_data(W_DId)
-        if self.ragged:
-            self.data_specs["max_doclength"] = int(
-                tf.reduce_max(W_DId.nested_row_lengths()[0]))
-        if not self.ragged:
-            self.data_specs["max_doclength"] = W_DId.shape[1]
-
-        ## Determine if batched 
-        self.batched = n_batch != None
-        assert (n_batch is None) == (n_epochs is None), "Either none of both of n_batch & n_epochs must be specified."
-        if self.batched:
-            assert n_batch <= W_DId.shape[0], "Batch size exeeds number of documents."
-        if self.batched and (n_batch <= 250):
-            print("Warning: A larger batch size (>250) is recommended.")
-
-        ## Counting Vocab (from fixed length or from actual observations)
-        if self._fix_vocab_size:
-            if self._fix_vocab_size < int(tf.reduce_max(W_DId)) + 1:
-                raise ValueError("Fixed Vocab is too small, there are more unique tokens in the data.")
-            self._vocab_size = self._fix_vocab_size
-        else:
-            self._vocab_size = int(tf.reduce_max(W_DId)) + 1
+        self.__inspect_data_and_settings(W_DId, n_batch, n_epochs)
         
         ## Initializing Theta-history
         self.Theta_history = []
 
-
-        ## Standard Gibbs sampling
+        ## Standard Gibbs sampling 
         if self._fit_procedure == "standard":
-
             ## "Full" Gibbs sampling
-            # - - - - - - - - - - - 
             if n_batch is None:
                 self._fit_gibbs(W_DId, N_iter, verbose)
-
             ## Batched Gibbs sampling 
             #  (only recommended if OOM Error if not batched)
             if n_batch is not None:
-
-                ## When using patched fitting, the ragged-property must be set
-                #  to false because the dataset gets padded first. This is taken
-                #  into account in the sampling functions.
-                self.ragged = False
-
-                ## Get in shape
-                K = self._K_topics
-                V = self._vocab_size
-                D = self.data_specs["N_docs"]
-                D_batch = n_batch
-                D_remainder_batch = D % n_batch
-
-                ## Setting up Theta prior (independend of D-dimension)
-                self.theta_prior = (self.theta_prior_val 
-                    * tf.ones(shape=(K, V), dtype=tf.float32))
-
-                ## Setting up tf.data.Dataset for the batched fitting. Padding
-                #  the data!
-                data = (tf.data.Dataset.from_tensor_slices(W_DId)
-                            .map(lambda x: x) 
-                            # Reshuffle is forbidden because the Pi-values are resampled and need to be matched.
-                            .shuffle(D, reshuffle_each_iteration=False) 
-                            .cache()
-                            .padded_batch(
-                                batch_size=n_batch, 
-                                padded_shapes=self.data_specs["max_doclength"], 
-                                padding_values=self._vocab_size+1, 
-                                drop_remainder=False) # The remainder is dropp
-                            .prefetch(1))
-                
-                ## Setting up Verbosity
-                iterator = tqdm(range(n_epochs)) # Default
-                if verbose == 0:
-                    iterator = range(n_epochs)
-
-                ## Epochs Loop
-                for i_epoch in iterator:
-                    if verbose == 2:
-                        print("Epoch", end=" ")
-                        print(f"{i_epoch+1}\r", end="", flush=True)
-                        print("")
-
-                    Pi_list = []
-
-                    ## Batches Loop
-                    for i_batch, W_batch in enumerate(data):
-                        if verbose == 2:
-                            print("Batch", end=" ")
-                            print(f"{i_batch+1}\r", end="", flush=True)
-                        
-
-                        ## Initializing C either from prior (random) or from 
-                        #  Pi of the last epoch and same batch
-                        if i_epoch == 0:
-                            C_DIdK_batch = self.__init_C_DIdK(W_batch)
-                        else:
-                            C_DIdK_batch = self.__sample_C(self.Theta, self.Pi_list[i_batch], W_batch)
-
-
-                        ## Reshaping Priors to also work for remainder batch
-                        if i_batch == 0:
-                            self.pi_prior = (self.pi_prior_val
-                                * tf.ones(shape=(D_batch, K), dtype=tf.float32))
-                        if i_batch == D // n_batch:
-                            ## Setting up priors with "corrected dimensions"   
-                            self.pi_prior = (self.pi_prior_val
-                                * tf.ones(shape=(D_remainder_batch, K), dtype=tf.float32))
-
-
-                        ## Per Batch Loop
-                        for __ in range(n_per_batch):
-                            self.Theta, Pi, C_DIdK_batch = self._gibbs_sample(W_batch, C_DIdK_batch)
-                        Pi_list.append(Pi)
-
-                    self.Pi_list = Pi_list # tf.stack(Pi_list, axis=-1)
-                    self.Theta_history.append(self.Theta)
-
-                self.Pi = tf.concat(self.Pi_list, axis=0)
-
-        
+                self._fit_gibbs_batched(W_DId, n_batch, n_epochs, n_per_batch, verbose)
         
         ## Collapsed Gibbs sampling
-        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
         if self._fit_procedure == "collapsed":
-
-            ## Get in shape
-            K = self._K_topics
-            V = self._vocab_size
-            D = self.data_specs["N_docs"]
-
-
             ## "Full" Collapsed Gibbs sampling
-            # - - - - - - - - - - - - - - - - 
             if n_batch is None:
-                ## Infer if ragged
-                try:
-                    W_DId = W_DId.numpy().tolist() # Unragged
-                except: 
-                    W_DId = W_DId.to_list() # Ragged
-                N_D = [len(doc) for doc in W_DId]
-
-
-                ## Setting up priors and initials
-                C_DNmax, n_KV, n_DK = self.__collapsed_gibbs_init(W_DId, N_D)
-                self.theta_prior = (self.theta_prior_val 
-                    * tf.ones(shape=(K, V), dtype=tf.float32))
-                self.pi_prior    = (self.pi_prior_val
-                    * tf.ones(shape=(D, K), dtype=tf.float32))
-
-                ## Setting up Verbosity
-                iterator = tqdm(range(N_iter)) # Default
-                if verbose == 0:
-                    iterator = range(N_iter)
-                
-                ## Sampling Loop
-                for _ in iterator:
-                    C_DNmax = self._collapsed_gibbs_sample(
-                        C_DNmax, n_KV, n_DK, N_D, W_DId)
-                
-                self.__collapsed_gibbs_sampling_posteriors(n_KV, n_DK)
-
-
-            ## Batched Collapsed Gibbs sampling
-            # - - - - - - - - - - - - - - - - - 
+                self._fit_collapsed_gibbs(W_DId, N_iter, verbose)
+            ## Batched Collapsed Gibbs sampling is not implemented
             if n_batch is not None:
                 raise NotImplementedError("Batched Processing with collapsed Gibbs sampling is not implemented.")
 
 
     ## Predict 
-    def predict(self, X, N_iter: int=10):
+    def predict(self, 
+        X: tf.Tensor, 
+        N_iter: int=10, 
+        pi_prior_val: float=0.5) -> tf.Tensor:
+        """Predicting Thetas for new data.
+
+        Parameters
+        ----------
+        X : tf.Tensor:
+            New word-Data.
+        N_iter : int=10
+            Iterations of resampling for the data.     
+        pi_prior_val : float=0.5
+
+        Returns
+        -------
+        Pi : tf.Tensor
+            document-topic prevalences for data X.
+        """
         ## Only implemented for processing the complete data at once. Batching
-        #  can easily be done outside of this.
+        #  can easily be done outside of this method by slicing the data.
+        #  An open todo could be to enable processing of data with "new" tokens
+        #  in the vocab by padding or similar. But this is outside of the scope
+        #  of this repo.
         self.batched = False
         ## Inspect data
-        self.__inspect_data(X)
+        self.__inspect_data_and_settings(X, None, None)
         ## Get in shape
         K = self._K_topics
         N_pred = self.data_specs["N_docs"]
         ## Prdiction is implemented with the standard Gibbs sampling procedure
-        self.pi_prior = (self.pi_prior_val
-                            * tf.ones(shape=(N_pred, K), dtype=tf.float32))
+        self.pi_prior = (pi_prior_val
+            * tf.ones(shape=(N_pred, K), dtype=tf.float32))
         C_DIdK = self.__init_C_DIdK(X)
-        for _ in range(N_iter):
-            N_DKV   = self.__tf_N_tensor(C_DIdK, X)
-            Pi      = self.__sample_Pi(N_DKV)
-            C_DIdK  = self.__sample_C(self.Theta, Pi, X)
+        if N_iter == 0:
+            Pi = self.__sample_Pi(tf.zeros((N_pred, K, self._vocab_size)))
+        else:
+            for _ in range(N_iter):
+                N_DKV   = self.__tf_N_tensor(C_DIdK, X)
+                Pi      = self.__sample_Pi(N_DKV)
+                C_DIdK  = self.__sample_C(self.Theta, Pi, X)
         return Pi
 
     ## Fit procedure for standard Gibbs complete processing
@@ -266,10 +145,9 @@ class gibbsSampler():
             self.Theta, self.Pi, C_DIdK = self._gibbs_sample(W_DId, C_DIdK)
             self.Theta_history.append(self.Theta)
 
-
     ## Fit procedure for standard Gibbs batched processing
     def _fit_gibbs_batched(self, W_DId, n_batch, n_epochs, n_per_batch, verbose):
-        ## When using batched fitting, the ragged-property must be set
+        ## When using patched fitting, the ragged-property must be set
         #  to false because the dataset gets padded first. This is taken
         #  into account in the sampling functions.
         self.ragged = False
@@ -296,7 +174,7 @@ class gibbsSampler():
                         batch_size=n_batch, 
                         padded_shapes=self.data_specs["max_doclength"], 
                         padding_values=self._vocab_size+1, 
-                        drop_remainder=False) # The remainder is dropp
+                        drop_remainder=False) # The remainder is dropped
                     .prefetch(1))
         
         ## Setting up Verbosity
@@ -327,6 +205,7 @@ class gibbsSampler():
                 else:
                     C_DIdK_batch = self.__sample_C(self.Theta, self.Pi_list[i_batch], W_batch)
 
+
                 ## Reshaping Priors to also work for remainder batch
                 if i_batch == 0:
                     self.pi_prior = (self.pi_prior_val
@@ -342,16 +221,46 @@ class gibbsSampler():
                     self.Theta, Pi, C_DIdK_batch = self._gibbs_sample(W_batch, C_DIdK_batch)
                 Pi_list.append(Pi)
 
-            self.Pi_list = Pi_list # tf.stack(Pi_list, axis=-1)
+            self.Pi_list = Pi_list
             self.Theta_history.append(self.Theta)
 
         self.Pi = tf.concat(self.Pi_list, axis=0)
 
-
-
     ## Fit procedure  for collapsed Gibbs (loops over words anyways).
-    def _fit_collapsed_gibbs(self):
-        pass
+    def _fit_collapsed_gibbs(self, W_DId, N_iter, verbose):
+
+        ## Get in shape
+        K = self._K_topics
+        V = self._vocab_size
+        D = self.data_specs["N_docs"]
+
+        ## Infer if ragged
+        try:
+            W_DId = W_DId.numpy().tolist() # Unragged
+        except: 
+            W_DId = W_DId.to_list() # Ragged
+        N_D = [len(doc) for doc in W_DId]
+
+
+        ## Setting up priors and initials
+        C_DNmax, n_KV, n_DK = self.__collapsed_gibbs_init(W_DId, N_D)
+        self.theta_prior = (self.theta_prior_val 
+            * tf.ones(shape=(K, V), dtype=tf.float32))
+        self.pi_prior    = (self.pi_prior_val
+            * tf.ones(shape=(D, K), dtype=tf.float32))
+
+        ## Setting up Verbosity
+        iterator = tqdm(range(N_iter)) # Default
+        if verbose == 0:
+            iterator = range(N_iter)
+        
+        ## Sampling Loop
+        for _ in iterator:
+            C_DNmax = self._collapsed_gibbs_sample(
+                C_DNmax, n_KV, n_DK, N_D, W_DId)
+        
+        self.__collapsed_gibbs_sampling_posteriors(n_KV, n_DK)
+
 
 
     ## Standard Gibbs Sampling
@@ -367,9 +276,6 @@ class gibbsSampler():
         ## Sample C_DNmaxK from Theta, Pi and N_DKV_
         C_DIdK = self.__sample_C(Theta, Pi, W_DId)
         return Theta, Pi, C_DIdK
-
-
-
 
     ## Initialize C_DIdK for the standard Gibbs sampler      
     def __init_C_DIdK(self, W_DId):
@@ -398,10 +304,6 @@ class gibbsSampler():
             C_DIdK = tf.one_hot(C_DId, K, axis=-1)
 
         return C_DIdK
-
-
-
-
 
     ## Calculate the N-tensor from C and W
     @tf.function
@@ -545,11 +447,8 @@ class gibbsSampler():
 
         return C_DNmax, n_KV, n_DK
 
-
+    ## Word probabilities given topic assignments
     def __collapsed_topic_prob(self, n_KV, n_DK, w_di, d):
-        """
-        P(z_{dn}^i=1 | z_{(-dn)}, w)
-        """
         ## Get in shape
         K = self._K_topics
         V = self._vocab_size
@@ -560,15 +459,15 @@ class gibbsSampler():
         
         for i in range(K):
             # P(w_dn | z_i)
-            _1 = (n_KV[i, w_di] + beta) / (n_KV[i, :].sum() + V*beta)
+            p1 = (n_KV[i, w_di] + beta) / (n_KV[i, :].sum() + V*beta)
             # P(z_i | d)
-            _2 = (n_DK[d, i] + alpha) / (n_DK[d, :].sum() + K*alpha)
+            p2 = (n_DK[d, i] + alpha) / (n_DK[d, :].sum() + K*alpha)
             
-            prob[i] = _1 * _2
+            prob[i] = p1 * p2
         
         return prob / prob.sum()
 
-
+    ## Calculating Posteriors
     def __collapsed_gibbs_sampling_posteriors(self, n_KV, n_DK):
 
         ## Get in shape
@@ -598,16 +497,40 @@ class gibbsSampler():
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
     ## Inspecting data at init and predict-calls
-    def __inspect_data(self, W_DId):
+    def __inspect_data_and_settings(self, W_DId, n_batch, n_epochs):
         self.data_specs = {}
         self.data_specs["N_docs"] = W_DId.shape[0]
 
+        ## Inferring Ragged-ness
         if isinstance(W_DId, tf.RaggedTensor):
             self.ragged = True
             self.data_specs["max_doclength"] = int(tf.reduce_max(W_DId.nested_row_lengths()[0]))
         else:
             self.ragged = False
             self.data_specs["max_doclength"] = int(W_DId.shape[1])
+        
+        ## Setting document lengths
+        if self.ragged:
+            self.data_specs["max_doclength"] = int(
+                tf.reduce_max(W_DId.nested_row_lengths()[0]))
+        if not self.ragged:
+            self.data_specs["max_doclength"] = W_DId.shape[1]
+
+        ## Determine if batched 
+        self.batched = n_batch != None
+        assert (n_batch is None) == (n_epochs is None), "Either none of both of n_batch & n_epochs must be specified."
+        if self.batched:
+            assert n_batch <= W_DId.shape[0], "Batch size exeeds number of documents."
+        if self.batched and (n_batch <= 250):
+            print("Warning: A larger batch size (>250) is recommended.")
+
+        ## Counting Vocab (from fixed length or from actual observations)
+        if self._fix_vocab_size:
+            if self._fix_vocab_size < int(tf.reduce_max(W_DId)) + 1:
+                raise ValueError("Fixed Vocab is too small, there are more unique tokens in the data.")
+            self._vocab_size = self._fix_vocab_size
+        else:
+            self._vocab_size = int(tf.reduce_max(W_DId)) + 1
 
     ## Dunder-method for printing
     def __repr__(self):
