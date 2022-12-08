@@ -34,16 +34,8 @@ n_{dkv} =  \{i \, \vert \, w_{di} == v \ \texttt{and} \ c_{idk} ==1\}
 as much as possible. Due to the fact, that the document lengths are variable there is the choice between looping over the number of documents or padding the documents to a unique length. When padded this can be vectorized as the elementwise product of 2 tensors in $\mathbb{R}^3$.
 
 **2. $C$-Tensor**: $c_{dik}$ is the topic assignment of word $i$ of document $d$ in a one-hot encoded manner (only one entry is 1, all others are 0 along the $k$-dimension). Sampling $C$ is sampling from 
-
-<img style="padding: 1em; 
-  margin-left: auto;
-  margin-right: auto;" 
-  src="https://latex.codecogs.com/svg.latex?\large&space;p(C\vert \Theta, \Pi, W)=\prod_{d=1}^D \prod_{i=1}^{N} \frac{\prod_{k=1}^K \left(\pi_{dk}\theta_{kw_{di}}\right)^{c_{dik}}}{\sum^K_{k'=1}\left(\pi_{dk'}\theta_{k'w_{di}}\right)}" 
-  title="" 
-/>
-
 ```math
-p(C\vert \Theta, \Pi, W)=\prod_{d=1}^D \prod_{i=1}^{N} \frac{\prod_{k=1}^K \left(\pi_{dk}\theta_{kw_{di}}\right)^{c_{dik}}}{\sum^K_{k'=1}\left(\pi_{dk'}\theta_{k'w_{di}}\right)}
+p(C\vert \Theta, \Pi, W)=\prod_{d=1}^D \prod \_{i=1}^{N} \frac{\prod_{k=1}^K \left(\pi_{dk}\theta_{kw_{di}}\right)^{c_{dik}}}{\sum^K_{k'=1}\left(\pi_{dk'}\theta_{k'w_{di}}\right)}
 ``` 
 which can be identitfied as a categorical distribution.
 
