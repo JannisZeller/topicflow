@@ -35,7 +35,7 @@ as much as possible. Due to the fact, that the document lengths are variable the
 
 **2. $C$-Tensor**: $c_{dik}$ is the topic assignment of word $i$ of document $d$ in a one-hot encoded manner (only one entry is 1, all others are 0 along the $k$-dimension). Sampling $C$ is sampling from 
 ```math
-p(C\vert \Theta, \Pi, W)=\prod_{d=1}^D \prod_{i=1}^{N} \frac{\prod \,_{k=1}^K \left(\pi_{dk}\theta_{kw_{di}}\right)^{c_{dik}}}{\sum^K_{k'=1}\left(\pi_{dk'}\theta_{k'w_{di}}\right)}
+p(C\vert \Theta, \Pi, W)=\prod_{d=1}^D \prod_{i=1}^{N} \frac{\prod _{k=1}^K \left(\pi_{dk}\theta_{kw_{di}}\right)^{c_{dik}}}{\sum^K_{k'=1}\left(\pi_{dk'}\theta_{k'w_{di}}\right)}
 ``` 
 which can be identitfied as a categorical distribution.
 
