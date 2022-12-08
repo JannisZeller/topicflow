@@ -28,7 +28,7 @@ In the Gibbs sampling implementation the Quantities from the mentioned [lecture]
 
 
 **1. N-Tensor**: One efficiency crtitical step is to vectorize the $n$-Tenosr
-$$n_{dkv} =  \{i \, \vert \, w_{di} == v \ \& \ c_{idk} ==1\}$$
+$$n_{dkv} =  \{i \, \vert \, w_{di} == v \ \texttt{and} \ c_{idk} ==1\}$$
 as much as possible. Due to the fact, that the document lengths are variable there is the choice between looping over the number of documents or padding the documents to a unique length. When padded this can be vectorized as the elementwise product of 2 tensors in $\mathbb{R}^3$.
 
 **2. $C$-Tensor**: $c_{dik}$ is the topic assignment of word $i$ of document $d$ in a one-hot encoded manner (only one entry is 1, all others are 0 along the $k$-dimension). Sampling $C$ is sampling from 
