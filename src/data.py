@@ -115,15 +115,16 @@ class squareLDDocuments(object):
             self.single_lengths = single_lengths
 
         if N_words_fixed is not None:
-            self.single_lengths = tf.constant(N_docs*[N_words_fixed],
-                                              dtype=tf.int32)
+            self.single_lengths = tf.constant(
+                N_docs*[N_words_fixed],
+                dtype=tf.int32)
 
     ## Construction of the topic-word-prevalences (Theta) as "stripes" in the
     #  word grid.
     def __construct_topic_word_prevalences(self, Theta_overwrite):
         if Theta_overwrite is None:
             Theta_idx = ([row for row in self.V_grid] + 
-                        [col for col in self.V_grid.T])
+                [col for col in self.V_grid.T])
             Theta = np.zeros((self.N_topics, self.N_vocab))
             denominator = self.V_grid.shape[0]
             for k, idx in enumerate(Theta_idx):
@@ -142,7 +143,6 @@ class squareLDDocuments(object):
     ## Sample word-topic-assigments (C-matrix) as categoricals
     def __sample_word_topic_assignments(self):
         dist_C  = tfd.Categorical(probs=self.Pi)
-
         if not self.uniform_doclengths:
             C_NmaxD = dist_C.sample(tf.reduce_max(self.single_lengths))
             C_DId_list = []
@@ -150,13 +150,10 @@ class squareLDDocuments(object):
                 C_DIdd = C_NmaxD[:self.single_lengths[d], d] # Cropping a single doc length
                 C_DId_list.append(C_DIdd) # Appending to list
             C_DId = tf.ragged.stack(C_DId_list)
-
         if self.uniform_doclengths:
             C_IdD = dist_C.sample(self.single_lengths[0])
             C_DId = tf.transpose(C_IdD)
-
         C_DIdK = tf.one_hot(C_DId, depth=self.N_topics, axis=-1)
-        
         self.C_DId = C_DId
         self.C_DIdK = C_DIdK
 
@@ -166,8 +163,7 @@ class squareLDDocuments(object):
             C_T = self.C_DId.flat_values
             dist_W_T = tfd.Categorical(probs=tf.gather(self.Theta, C_T))
             W_T = dist_W_T.sample()
-            W_DId = tf.RaggedTensor.from_row_lengths(
-                W_T, 
+            W_DId = tf.RaggedTensor.from_row_lengths(W_T, 
                 *self.C_DId.nested_row_lengths())
         if self.uniform_doclengths:
             dist_W_DN = tfd.Categorical(probs=tf.gather(self.Theta, self.C_DId))
