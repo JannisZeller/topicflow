@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
-# src.data
-# --------
+# src_lda.data
+# ------------
 # 
 # This is the source file containing a class which samples couments int the toy 
 # model by Griffiths & Steyver (2004, https://doi.org/10.1073/pnas.0307752101).
@@ -8,7 +8,7 @@
 # they can be visualized as square-images. I use a custom procedure here 
 # instead of a tfp-joined distribution (tfd.JointDistribution) for 2 reasons
 # 1. I want full control and transparency for each step.
-# 2. I learnt about tfd.JointDistribution when I already finished this script.
+# 2. I learned about tfd.JointDistribution when I already finished this script.
 # ------------------------------------------------------------------------------
 
 
@@ -33,8 +33,8 @@ class squareLDDocuments(object):
         self,
         N_docs: int, 
         sqrt_N_vocab:  int,
-        N_words_fixed: int=None,
-        N_words_rate:  int=None,
+        N_words: int,
+        uniform_doclengths: bool=True,
         alpha: float=1.,
         Theta_overwrite: tf.Tensor=None,
         ) -> object:
@@ -46,10 +46,11 @@ class squareLDDocuments(object):
         sqrt_N_vocab : int
             Size of square root of vocab size. Number of latent topic 
             automatically becomes 2*sqrt_N_vocab
-        N_words_fixed : int=None
-            Number of words per document fixed.
-        N_words_rate : int=None
-            Number of words per document as rate of a poisson distribution
+        N_words : int
+            Number of words per document.
+        uniform_doclengths : bool=True
+            Bool indicating whether the documents should vary in length. If 
+            False the document lengths get sampled from a poisson distribution.
         alpha : float
             Sparsity of Document-Topic matrix (higher is LESS sparse)
         theta_overwrite : tf.Tensor
@@ -58,18 +59,15 @@ class squareLDDocuments(object):
         """
         
         ## Overall data specifications
-        assert (N_words_fixed is None) != (N_words_rate is None), "Exactly one of N_words_fixed and N_words_rate must be passed."
         self.N_topics = int(2*sqrt_N_vocab)
         self.N_vocab = int(sqrt_N_vocab**2)
         self.N_docs = N_docs
+        self.N_words = N_words
         self.alphas = self.N_topics*[alpha]
-        if N_words_rate is not None:
-            self.uniform_doclengths = False
-        if N_words_fixed is not None:
-            self.uniform_doclengths = True
+        self.uniform_doclengths = uniform_doclengths
 
         ## Sampling
-        self.__sample_single_lengths(N_docs, N_words_fixed, N_words_rate)
+        self.__sample_single_lengths()
         self.__construct_word_gird(sqrt_N_vocab)
         self.__construct_topic_word_prevalences(Theta_overwrite)
         self.__sample_document_topic_prevalences()
@@ -103,21 +101,17 @@ class squareLDDocuments(object):
 
     ## Generate single document lengths, depending whether specified with fixed
     #  or random (Poisson-) document lengths.
-    def __sample_single_lengths(self, 
-        N_docs: int,
-        N_words_fixed: int=None,
-        N_words_rate:  int=None):
+    def __sample_single_lengths(self):
 
-        if N_words_rate is not None:
-            single_lengths_dist = tfd.Poisson(rate=N_words_rate)
-            single_lengths      = tf.cast(single_lengths_dist.sample(N_docs), 
-                                          dtype=tf.int32)
+        if not self.uniform_doclengths:
+            single_lengths_dist = tfd.Poisson(rate=self.N_words)
+            single_lengths      = tf.cast(
+                single_lengths_dist.sample(self.N_docs), dtype=tf.int32)
             self.single_lengths = single_lengths
 
-        if N_words_fixed is not None:
+        if self.uniform_doclengths:
             self.single_lengths = tf.constant(
-                N_docs*[N_words_fixed],
-                dtype=tf.int32)
+                self.N_docs*[self.N_words], dtype=tf.int32)
 
     ## Construction of the topic-word-prevalences (Theta) as "stripes" in the
     #  word grid.
