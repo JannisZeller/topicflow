@@ -42,7 +42,7 @@ The joint Distribution of LDA consists of:
 ```math
 P(w_{di}=v \vert c_{dik}, \Theta) = \prod_k \Theta_{kv}^{c_{dik}}, \quad \text{where} \quad c_{dik} \quad \text{is one-hot encoded.} 
 ```
-This is equivalend to 
+    This is equivalend to 
 ```math
 W \vert C, \Theta \sim \textsf{Categorical}(\texttt{tf.gather(} \Theta, C \texttt{)} )\, .
 ```
